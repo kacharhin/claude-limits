@@ -1,0 +1,8 @@
+.build/
+*.app/
+.DS_Store
+*.xcodeproj
+*.xcworkspace
+CLAUDE.md
+tools/AppIcon.png
+tools/*.iconset/
