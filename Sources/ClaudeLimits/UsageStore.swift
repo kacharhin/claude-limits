@@ -15,7 +15,7 @@ final class UsageStore: ObservableObject {
     // Polling cadence. The data moves slowly (% over 5h / 7d windows), so we
     // poll gently and back off hard when the endpoint rate-limits us (429).
     private let normalInterval: TimeInterval = 180   // 3 min
-    private let minBackoff:     TimeInterval = 120
+    private let minBackoff:     TimeInterval = 300    // 5 min
     private let maxBackoff:     TimeInterval = 900    // 15 min
     private var backoff:        TimeInterval = 0
     private var nextDelay:      TimeInterval = 180
@@ -61,7 +61,8 @@ final class UsageStore: ObservableObject {
             phase = .rateLimited
             backoff = min(max(backoff * 2, minBackoff), maxBackoff)
             nextDelay = max(retryAfter ?? 0, backoff)
-            status = "Rate limited · retrying in \(Int(nextDelay))s"
+            let mins = max(1, Int((nextDelay / 60).rounded()))
+            status = "Rate limited · try in ~\(mins) min"
         case .failure(let msg):
             isError = true
             phase = .error
