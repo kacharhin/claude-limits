@@ -15,8 +15,12 @@ enum UsageClient {
 
         do {
             let (data, resp) = try await URLSession.shared.data(for: req)
-            guard let http = resp as? HTTPURLResponse else { return .failure("нет ответа") }
+            guard let http = resp as? HTTPURLResponse else { return .failure("no response") }
             if http.statusCode == 401 { return .unauthorized }
+            if http.statusCode == 429 {
+                let ra = (http.value(forHTTPHeaderField: "Retry-After")).flatMap(TimeInterval.init)
+                return .rateLimited(retryAfter: ra)
+            }
             guard http.statusCode == 200 else { return .failure("HTTP \(http.statusCode)") }
             guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 return .failure("плохой JSON")

@@ -73,6 +73,8 @@ struct DropdownView: View {
 
                 if store.isError && store.usage != nil {
                     Text(store.status).font(.system(size: 11)).foregroundStyle(Theme.warning)
+                } else if store.phase == .rateLimited && store.usage != nil {
+                    Text(store.status).font(.system(size: 11)).foregroundStyle(Theme.inkMuted)
                 }
 
                 line

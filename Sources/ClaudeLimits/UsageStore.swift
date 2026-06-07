@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Phase {
-    case loading, ok, noToken, unauthorized, error
+    case loading, ok, noToken, unauthorized, rateLimited, error
 }
 
 @MainActor
@@ -12,15 +12,27 @@ final class UsageStore: ObservableObject {
     @Published var isError = false
     @Published var phase: Phase = .loading
 
-    private var timer: Timer?
+    // Polling cadence. The data moves slowly (% over 5h / 7d windows), so we
+    // poll gently and back off hard when the endpoint rate-limits us (429).
+    private let normalInterval: TimeInterval = 180   // 3 min
+    private let minBackoff:     TimeInterval = 120
+    private let maxBackoff:     TimeInterval = 900    // 15 min
+    private var backoff:        TimeInterval = 0
+    private var nextDelay:      TimeInterval = 180
+
+    private var loop: Task<Void, Never>?
     private var started = false
 
     func startIfNeeded() {
         guard !started else { return }
         started = true
-        Task { await refresh() }
-        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { await self?.refresh() }
+        loop = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.refresh()
+                let delay = self.nextDelay
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
         }
     }
 
@@ -32,18 +44,29 @@ final class UsageStore: ObservableObject {
             isError = false
             phase = .ok
             status = "ok"
+            backoff = 0
+            nextDelay = normalInterval
         case .unauthorized:
             isError = true
             phase = .unauthorized
             status = "Session expired — sign in to Claude Code again"
+            nextDelay = normalInterval
         case .noToken:
             isError = true
             phase = .noToken
             status = "Claude Code token not found"
+            nextDelay = normalInterval
+        case .rateLimited(let retryAfter):
+            isError = false                  // transient; keep last data calmly
+            phase = .rateLimited
+            backoff = min(max(backoff * 2, minBackoff), maxBackoff)
+            nextDelay = max(retryAfter ?? 0, backoff)
+            status = "Rate limited · retrying in \(Int(nextDelay))s"
         case .failure(let msg):
             isError = true
             phase = .error
-            status = "Error: \(msg)"        // keep last usage on screen
+            status = "Error: \(msg)"          // keep last usage on screen
+            nextDelay = 60
         }
     }
 

@@ -19,7 +19,8 @@ struct Usage {
 
 enum FetchResult {
     case success(Usage)
-    case unauthorized       // token expired / 401
-    case noToken            // keychain item missing
-    case failure(String)    // network / parse error
+    case unauthorized                       // token expired / 401
+    case noToken                            // keychain item missing
+    case rateLimited(retryAfter: TimeInterval?) // 429
+    case failure(String)                    // network / parse error
 }
